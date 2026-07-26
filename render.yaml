@@ -3,6 +3,7 @@ services:
   - type: web
     name: traceguard-python-engine
     env: python
+    plan: free
     rootDir: python-engine
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -20,6 +21,7 @@ services:
   - type: web
     name: traceguard-backend
     env: node
+    plan: free
     rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: npm start
@@ -36,6 +38,7 @@ services:
   - type: web
     name: traceguard-frontend
     env: node
+    plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
     startCommand: npm start
