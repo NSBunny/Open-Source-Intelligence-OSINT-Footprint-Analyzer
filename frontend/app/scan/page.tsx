@@ -47,7 +47,7 @@ function ScanContent() {
 
         // Brief pause to show completion
         await new Promise((resolve) => setTimeout(resolve, 500));
-        router.push(`/results/${result.scanId}`);
+        router.push(`/results/${result.scanId}?email=${encodeURIComponent(email)}`);
       } catch {
         // If backend is down, use mock mode
         const mockId = "demo-" + Date.now();

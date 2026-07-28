@@ -13,7 +13,10 @@ class ApiService {
     const res = await fetch(`${this.baseUrl}/api/scan`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        target: data.email || data.username || "",
+        depth: "standard",
+      }),
     });
     if (!res.ok) throw new Error("Failed to start scan");
     return res.json();

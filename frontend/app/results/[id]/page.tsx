@@ -13,6 +13,7 @@ import ExposureCharts from "@/components/ExposureCharts";
 import PdfExport from "@/components/PdfExport";
 import { api } from "@/services/api";
 import { getMockScanResult } from "@/lib/mockData";
+import { transformBackendResult } from "@/lib/transformResult";
 import type { ScanResult } from "@/types";
 import { useSearchParams } from "next/navigation";
 import {
@@ -34,8 +35,12 @@ export default function ResultsPage({ params }: ResultsPageProps) {
   useEffect(() => {
     const fetchResult = async () => {
       try {
-        const result = await api.getScanResult(id);
-        setScanResult(result);
+        // Fetch raw result from Express backend
+        const raw = await api.getScanResult(id);
+
+        // Transform the Express backend response → frontend ScanResult type
+        const transformed = transformBackendResult(raw, id, targetEmail);
+        setScanResult(transformed);
       } catch {
         // Fallback to mock data for standalone demo using input email
         setScanResult(getMockScanResult(id, targetEmail));
