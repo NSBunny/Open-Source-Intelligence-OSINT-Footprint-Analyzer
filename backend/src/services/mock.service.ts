@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
-// TraceGuard 2.0 — Comprehensive Mock Data Service
-// Provides rich, realistic OSINT data when the Python engine
-// is unavailable.  Everything here is fictional but plausible.
+// TraceGuard 2.0 — Comprehensive Dynamic Mock Data Service
+// Provides rich, realistic, target-seeded OSINT data so every email
+// target receives unique and consistent scan findings.
 // ─────────────────────────────────────────────────────────────
 
 import { v4 as uuid } from 'uuid';
@@ -13,391 +13,415 @@ import {
   AttackVector,
   RemediationStep,
   TimelineEvent,
-  SeverityLevel,
 } from '../types';
 
-// ── Breach Database ──────────────────────────────────────────
-
-export function getMockBreaches(target: string): BreachRecord[] {
-  const isDemo = target.toLowerCase().includes('demo') ||
-                 target.toLowerCase().includes('traceguard');
-
-  const breaches: BreachRecord[] = [
-    {
-      id: uuid(),
-      name: 'Adobe',
-      domain: 'adobe.com',
-      breachDate: '2013-10-04',
-      addedDate: '2013-12-04',
-      modifiedDate: '2022-05-15',
-      pwnCount: 152_445_165,
-      description:
-        'In October 2013, 153 million Adobe accounts were breached. The attack exposed ' +
-        'customer IDs, usernames, emails, encrypted passwords and password hints in ' +
-        'plaintext. The password cryptography was poorly implemented (3DES, ECB mode) ' +
-        'enabling many passwords to be recovered.',
-      dataClasses: [
-        'Email addresses',
-        'Password hints',
-        'Passwords',
-        'Usernames',
-      ],
-      isVerified: true,
-      isSensitive: false,
-      severity: 'HIGH',
-      logoUrl: 'https://logo.clearbit.com/adobe.com',
-    },
-    {
-      id: uuid(),
-      name: 'Canva',
-      domain: 'canva.com',
-      breachDate: '2019-05-24',
-      addedDate: '2019-06-18',
-      modifiedDate: '2023-01-12',
-      pwnCount: 137_272_116,
-      description:
-        'In May 2019, the graphic design tool Canva suffered a data breach that impacted ' +
-        '137 million users. The exposed data included email addresses, usernames, names, ' +
-        'cities of residence and bcrypt-hashed passwords. Canva prompted users to change ' +
-        'passwords and revoked all OAuth tokens.',
-      dataClasses: [
-        'Email addresses',
-        'Geographic locations',
-        'Names',
-        'Passwords',
-        'Usernames',
-      ],
-      isVerified: true,
-      isSensitive: false,
-      severity: 'HIGH',
-      logoUrl: 'https://logo.clearbit.com/canva.com',
-    },
-    {
-      id: uuid(),
-      name: 'LinkedIn',
-      domain: 'linkedin.com',
-      breachDate: '2021-06-22',
-      addedDate: '2021-06-29',
-      modifiedDate: '2023-08-05',
-      pwnCount: 700_000_000,
-      description:
-        'In June 2021, data associated with 700 million LinkedIn users was scraped and ' +
-        'posted for sale. While LinkedIn maintained this was not a breach but rather ' +
-        'aggregation of publicly-available data, the dataset included email addresses, ' +
-        'phone numbers, geolocation records, and inferred salaries.',
-      dataClasses: [
-        'Email addresses',
-        'Phone numbers',
-        'Geographic locations',
-        'Job titles',
-        'Professional skills',
-        'Inferred salaries',
-      ],
-      isVerified: true,
-      isSensitive: false,
-      severity: 'MEDIUM',
-      logoUrl: 'https://logo.clearbit.com/linkedin.com',
-    },
-    {
-      id: uuid(),
-      name: 'Dropbox',
-      domain: 'dropbox.com',
-      breachDate: '2012-07-01',
-      addedDate: '2016-08-31',
-      modifiedDate: '2022-11-20',
-      pwnCount: 68_648_009,
-      description:
-        'In mid-2012, Dropbox suffered a data breach which was not publicly disclosed ' +
-        'until 2016. The breach exposed 68 million unique email addresses alongside ' +
-        'bcrypt and SHA-1 hashes of passwords. Dropbox forced password resets on all ' +
-        'accounts that had not changed their credentials since 2012.',
-      dataClasses: [
-        'Email addresses',
-        'Passwords',
-      ],
-      isVerified: true,
-      isSensitive: false,
-      severity: 'HIGH',
-      logoUrl: 'https://logo.clearbit.com/dropbox.com',
-    },
-  ];
-
-  // For non-demo targets, randomly include 1–3 of the breaches
-  if (!isDemo) {
-    const count = Math.floor(Math.random() * 3) + 1;
-    return breaches.sort(() => Math.random() - 0.5).slice(0, count);
+// Deterministic seed generator for a target string
+function getSeed(target: string): number {
+  let hash = 0;
+  const str = target.toLowerCase().trim();
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
   }
-
-  return breaches;
+  return Math.abs(hash);
 }
 
-// ── Social Profiles ──────────────────────────────────────────
+// Master breach pool
+const ALL_BREACHES: Omit<BreachRecord, 'id'>[] = [
+  {
+    name: 'Adobe',
+    domain: 'adobe.com',
+    breachDate: '2013-10-04',
+    addedDate: '2013-12-04',
+    modifiedDate: '2022-05-15',
+    pwnCount: 152_445_165,
+    description:
+      'In October 2013, 153 million Adobe accounts were breached. The attack exposed ' +
+      'customer IDs, usernames, emails, encrypted passwords and password hints in plaintext.',
+    dataClasses: ['Email addresses', 'Password hints', 'Passwords', 'Usernames'],
+    isVerified: true,
+    isSensitive: false,
+    severity: 'HIGH',
+    logoUrl: 'https://logo.clearbit.com/adobe.com',
+  },
+  {
+    name: 'Canva',
+    domain: 'canva.com',
+    breachDate: '2019-05-24',
+    addedDate: '2019-06-18',
+    modifiedDate: '2023-01-12',
+    pwnCount: 137_272_116,
+    description:
+      'In May 2019, graphic design platform Canva suffered a breach impacting 137 million users. ' +
+      'Exposed data included email addresses, usernames, names, and bcrypt-hashed passwords.',
+    dataClasses: ['Email addresses', 'Geographic locations', 'Names', 'Passwords', 'Usernames'],
+    isVerified: true,
+    isSensitive: false,
+    severity: 'HIGH',
+    logoUrl: 'https://logo.clearbit.com/canva.com',
+  },
+  {
+    name: 'LinkedIn',
+    domain: 'linkedin.com',
+    breachDate: '2021-06-22',
+    addedDate: '2021-06-29',
+    modifiedDate: '2023-08-05',
+    pwnCount: 700_000_000,
+    description:
+      'In June 2021, data associated with 700 million LinkedIn users was scraped and posted for sale. ' +
+      'Data included emails, phone numbers, geolocation records, and employment info.',
+    dataClasses: ['Email addresses', 'Phone numbers', 'Geographic locations', 'Job titles', 'Professional skills'],
+    isVerified: true,
+    isSensitive: false,
+    severity: 'MEDIUM',
+    logoUrl: 'https://logo.clearbit.com/linkedin.com',
+  },
+  {
+    name: 'Dropbox',
+    domain: 'dropbox.com',
+    breachDate: '2012-07-01',
+    addedDate: '2016-08-31',
+    modifiedDate: '2022-11-20',
+    pwnCount: 68_648_009,
+    description:
+      'In mid-2012, Dropbox suffered a breach exposing 68 million unique email addresses alongside ' +
+      'bcrypt and SHA-1 hashes of passwords.',
+    dataClasses: ['Email addresses', 'Passwords'],
+    isVerified: true,
+    isSensitive: false,
+    severity: 'HIGH',
+    logoUrl: 'https://logo.clearbit.com/dropbox.com',
+  },
+  {
+    name: 'Twitter (X)',
+    domain: 'twitter.com',
+    breachDate: '2023-01-04',
+    addedDate: '2023-01-06',
+    modifiedDate: '2023-05-10',
+    pwnCount: 220_000_000,
+    description:
+      'In January 2023, 220 million Twitter user records were leaked on hacker forums containing ' +
+      'email addresses, account handles, creation dates, and follower metrics.',
+    dataClasses: ['Email addresses', 'Usernames', 'Account creation dates', 'Follower counts'],
+    isVerified: true,
+    isSensitive: false,
+    severity: 'MEDIUM',
+    logoUrl: 'https://logo.clearbit.com/twitter.com',
+  },
+  {
+    name: 'Wattpad',
+    domain: 'wattpad.com',
+    breachDate: '2020-06-29',
+    addedDate: '2020-07-25',
+    modifiedDate: '2022-04-18',
+    pwnCount: 268_745_252,
+    description:
+      'In June 2020, storytelling platform Wattpad suffered a breach exposing 268 million records ' +
+      'including credentials, names, IP addresses, and birth dates.',
+    dataClasses: ['Email addresses', 'Passwords', 'IP addresses', 'Dates of birth', 'Usernames'],
+    isVerified: true,
+    isSensitive: false,
+    severity: 'HIGH',
+    logoUrl: 'https://logo.clearbit.com/wattpad.com',
+  },
+  {
+    name: 'MyFitnessPal',
+    domain: 'myfitnesspal.com',
+    breachDate: '2018-02-01',
+    addedDate: '2018-03-29',
+    modifiedDate: '2021-10-12',
+    pwnCount: 143_612_450,
+    description:
+      'In February 2018, Under Armour revealed 150 million MyFitnessPal accounts were compromised, ' +
+      'exposing usernames, email addresses, and SHA-1 password hashes.',
+    dataClasses: ['Email addresses', 'Passwords', 'Usernames'],
+    isVerified: true,
+    isSensitive: false,
+    severity: 'MEDIUM',
+    logoUrl: 'https://logo.clearbit.com/myfitnesspal.com',
+  },
+  {
+    name: 'Zynga',
+    domain: 'zynga.com',
+    breachDate: '2019-09-01',
+    addedDate: '2019-12-19',
+    modifiedDate: '2022-03-01',
+    pwnCount: 172_869_721,
+    description:
+      'In September 2019, game developer Zynga was breached, exposing 173 million account details ' +
+      'including salted SHA-1 password hashes.',
+    dataClasses: ['Email addresses', 'Passwords', 'Usernames', 'Phone numbers'],
+    isVerified: true,
+    isSensitive: false,
+    severity: 'HIGH',
+    logoUrl: 'https://logo.clearbit.com/zynga.com',
+  },
+  {
+    name: 'Ticketmaster',
+    domain: 'ticketmaster.com',
+    breachDate: '2024-05-27',
+    addedDate: '2024-06-01',
+    modifiedDate: '2024-06-15',
+    pwnCount: 560_000_000,
+    description:
+      'In May 2024, ShinyHunters posted 560 million Ticketmaster customer records stolen from ' +
+      'Snowflake cloud databases containing customer contacts and partial payment card info.',
+    dataClasses: ['Email addresses', 'Names', 'Phone numbers', 'Payment history', 'Partial credit cards'],
+    isVerified: true,
+    isSensitive: true,
+    severity: 'CRITICAL',
+    logoUrl: 'https://logo.clearbit.com/ticketmaster.com',
+  },
+  {
+    name: 'AT&T Data Leak',
+    domain: 'att.com',
+    breachDate: '2024-03-30',
+    addedDate: '2024-04-05',
+    modifiedDate: '2024-05-20',
+    pwnCount: 73_000_000,
+    description:
+      'In March 2024, AT&T confirmed data from 73 million current and former account holders ' +
+      'was released on the dark web, containing SSNs, passcodes, emails, and home addresses.',
+    dataClasses: ['Email addresses', 'Social Security Numbers', 'Passcodes', 'Physical addresses'],
+    isVerified: true,
+    isSensitive: true,
+    severity: 'CRITICAL',
+    logoUrl: 'https://logo.clearbit.com/att.com',
+  },
+];
+
+// ── Breach Database (Seeded) ─────────────────────────────────
+
+export function getMockBreaches(target: string): BreachRecord[] {
+  const seed = getSeed(target);
+  const count = (seed % 4) + 2; // 2 to 5 breaches per target
+  const result: BreachRecord[] = [];
+  const pool = [...ALL_BREACHES];
+
+  let currentSeed = seed;
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    const index = currentSeed % pool.length;
+    const breach = pool.splice(index, 1)[0];
+    result.push({
+      ...breach,
+      id: uuid(),
+    });
+    currentSeed = Math.floor(currentSeed / 3) + 11;
+  }
+
+  return result;
+}
+
+// ── Social Profiles (Seeded) ─────────────────────────────────
 
 export function getMockSocialProfiles(target: string): SocialProfile[] {
+  const seed = getSeed(target);
   const username = target.split('@')[0] || target;
+  const domain = target.split('@')[1] || 'dev';
+
+  const locations = [
+    'San Francisco, CA',
+    'New York, NY',
+    'Austin, TX',
+    'Seattle, WA',
+    'London, UK',
+    'Berlin, Germany',
+    'Toronto, Canada',
+  ];
 
   return [
     {
       platform: 'GitHub',
-      username: `${username}`,
+      username: username,
       url: `https://github.com/${username}`,
-      bio: 'Full-stack developer • Open source enthusiast • Building things that matter',
-      followers: 342,
-      following: 128,
-      posts: 847,
-      isVerified: false,
-      lastActive: '2026-07-10T14:23:00Z',
-      profileImageUrl: `https://avatars.githubusercontent.com/u/12345678`,
+      bio: `Software engineer & OSINT explorer • Building web applications`,
+      followers: 50 + (seed % 950),
+      following: 30 + (seed % 300),
+      posts: 40 + (seed % 600),
+      isVerified: seed % 7 === 0,
+      lastActive: new Date(Date.now() - (seed % 14) * 86400000).toISOString(),
+      profileImageUrl: `https://avatars.githubusercontent.com/u/${1000000 + (seed % 8000000)}`,
       metadata: {
-        publicRepos: 47,
-        publicGists: 12,
-        joinedDate: '2018-03-15',
-        company: 'Freelance',
-        location: 'San Francisco, CA',
-        hireable: true,
+        publicRepos: 12 + (seed % 45),
+        publicGists: 2 + (seed % 15),
+        joinedDate: `${2016 + (seed % 7)}-0${(seed % 8) + 1}-15`,
+        company: seed % 2 === 0 ? 'Tech Corp' : 'Freelance',
+        location: locations[seed % locations.length],
+        hireable: seed % 2 === 0,
       },
     },
     {
       platform: 'LinkedIn',
-      username: `${username}`,
+      username: username,
       url: `https://linkedin.com/in/${username}`,
-      bio: 'Senior Software Engineer | Cloud Architecture | DevSecOps',
-      followers: 1_254,
-      following: 430,
-      posts: 23,
+      bio: `Professional in Technology | ${domain}`,
+      followers: 250 + (seed % 2800),
+      following: 150 + (seed % 600),
+      posts: 5 + (seed % 40),
       isVerified: false,
-      lastActive: '2026-07-08T09:15:00Z',
-      profileImageUrl: `https://media.licdn.com/dms/image/placeholder.jpg`,
+      lastActive: new Date(Date.now() - (seed % 5) * 86400000).toISOString(),
       metadata: {
-        connections: '500+',
-        endorsements: 38,
-        recommendations: 7,
+        connections: `${300 + (seed % 700)}+`,
         industry: 'Information Technology',
-        currentRole: 'Senior Software Engineer at TechCorp',
+        location: locations[seed % locations.length],
       },
     },
     {
-      platform: 'Personal Blog',
-      username: `${username}`,
-      url: `https://${username}.dev`,
-      bio: 'Writing about security, privacy, and the modern web',
-      followers: 89,
-      following: 0,
-      posts: 156,
-      isVerified: false,
-      lastActive: '2026-06-28T18:40:00Z',
-      metadata: {
-        engine: 'Hugo',
-        theme: 'PaperMod',
-        totalPosts: 156,
-        categories: 'security, privacy, web-dev, devops',
-        rssSubscribers: 89,
-      },
+      platform: 'Twitter / X',
+      username: username,
+      url: `https://x.com/${username}`,
+      bio: `Tech, security, and digital identity.`,
+      followers: 70 + (seed % 1200),
+      following: 120 + (seed % 500),
+      posts: 80 + (seed % 800),
+      isVerified: seed % 5 === 0,
+      lastActive: new Date(Date.now() - (seed % 3) * 86400000).toISOString(),
     },
   ];
 }
 
-// ── Web Mentions ─────────────────────────────────────────────
+// ── Web Mentions (Seeded) ────────────────────────────────────
 
 export function getMockWebMentions(target: string): WebMention[] {
+  const seed = getSeed(target);
   const username = target.split('@')[0] || target;
 
   return [
     {
       id: uuid(),
-      title: `Open-Source Contribution Spotlight: ${username}`,
-      url: 'https://dev.to/community/oss-spotlight-2026',
+      title: `Developer Profile & Activity: ${username}`,
+      url: `https://dev.to/${username}`,
       source: 'DEV Community',
-      snippet:
-        `${username} has made significant contributions to several security-focused ` +
-        'open-source projects, including a widely-adopted CSRF protection middleware ' +
-        'and a secrets-scanning pre-commit hook.',
-      publishedDate: '2026-05-14T10:00:00Z',
+      snippet: `${username} has published developer writeups and contributions in open-source security topics.`,
+      publishedDate: new Date(Date.now() - (seed % 40) * 86400000).toISOString(),
       sentiment: 'positive',
-      relevanceScore: 0.92,
+      relevanceScore: 0.88 + ((seed % 10) / 100),
       category: 'Professional',
     },
     {
       id: uuid(),
-      title: 'Conference Speaker List — SecureCon 2025',
-      url: 'https://securecon.io/speakers/2025',
-      source: 'SecureCon',
-      snippet:
-        `Talk: "Beyond Passwords — Passkeys in Production" by ${username}. ` +
-        'A deep-dive into migrating legacy authentication systems to WebAuthn ' +
-        'without breaking existing user flows.',
-      publishedDate: '2025-11-02T08:00:00Z',
-      sentiment: 'positive',
-      relevanceScore: 0.87,
-      category: 'Public Speaking',
-    },
-    {
-      id: uuid(),
-      title: 'Data Breach Notification Archive',
+      title: `Data Breach Archive Listing`,
       url: 'https://haveibeenpwned.com/PwnedWebsites',
       source: 'Have I Been Pwned',
-      snippet:
-        `The email address associated with ${username} was found in 4 known data ` +
-        'breaches spanning from 2012 to 2021, including the Adobe and LinkedIn incidents.',
-      publishedDate: '2024-03-18T12:00:00Z',
+      snippet: `Target email ${target} was indexed in public credential leak databases.`,
+      publishedDate: new Date(Date.now() - (seed % 90) * 86400000).toISOString(),
       sentiment: 'negative',
-      relevanceScore: 0.95,
+      relevanceScore: 0.96,
       category: 'Security',
-    },
-    {
-      id: uuid(),
-      title: `GitHub Stars: Trending Repos This Week`,
-      url: 'https://github.com/trending',
-      source: 'GitHub',
-      snippet:
-        `A security utility authored by ${username} trended on GitHub this week, ` +
-        'receiving 340+ stars in 7 days. The tool automates SSL certificate rotation ' +
-        'for Kubernetes clusters.',
-      publishedDate: '2026-06-20T16:30:00Z',
-      sentiment: 'positive',
-      relevanceScore: 0.78,
-      category: 'Professional',
-    },
-    {
-      id: uuid(),
-      title: 'Paste Archive — Credential Dump #4821',
-      url: 'https://pastebin.com/archive/4821',
-      source: 'Pastebin Archive',
-      snippet:
-        `An email address matching ${username}\'s known aliases appeared in a combo ` +
-        'list posted to an underground paste site. The list contained email:password ' +
-        'pairs likely sourced from the 2019 Canva breach.',
-      publishedDate: '2023-08-05T03:12:00Z',
-      sentiment: 'negative',
-      relevanceScore: 0.98,
-      category: 'Threat Intelligence',
     },
   ];
 }
 
-// ── Sensitive Data Exposures ─────────────────────────────────
+// ── Sensitive Data Exposures (Seeded) ────────────────────────
 
 export function getMockDataExposures(target: string): DataExposure[] {
-  return [
+  const seed = getSeed(target);
+  const breaches = getMockBreaches(target);
+
+  const exposures: DataExposure[] = [
     {
       type: 'Email Address',
       value: target,
-      source: 'Multiple breach databases',
+      source: breaches.map((b) => b.name).join(', ') || 'Breach Database',
       severity: 'MEDIUM',
-      firstSeen: '2012-07-01',
-      lastSeen: '2021-06-22',
-      isRedacted: false,
-    },
-    {
-      type: 'Password Hash (bcrypt)',
-      value: '$2b$12$████████████████████████████████████████████',
-      source: 'Dropbox breach (2012)',
-      severity: 'HIGH',
-      firstSeen: '2016-08-31',
-      lastSeen: '2016-08-31',
-      isRedacted: true,
-    },
-    {
-      type: 'Password Hint',
-      value: 'favorite pet + birth year',
-      source: 'Adobe breach (2013)',
-      severity: 'MEDIUM',
-      firstSeen: '2013-12-04',
-      lastSeen: '2013-12-04',
-      isRedacted: false,
-    },
-    {
-      type: 'IP Address',
-      value: '198.51.███.███',
-      source: 'LinkedIn scrape (2021)',
-      severity: 'LOW',
-      firstSeen: '2021-06-22',
-      lastSeen: '2021-06-22',
-      isRedacted: true,
-    },
-    {
-      type: 'Phone Number',
-      value: '+1 (███) ███-4827',
-      source: 'LinkedIn scrape (2021)',
-      severity: 'HIGH',
-      firstSeen: '2021-06-22',
-      lastSeen: '2021-06-22',
-      isRedacted: true,
-    },
-    {
-      type: 'Geographic Location',
-      value: 'San Francisco, CA, United States',
-      source: 'Canva breach + LinkedIn scrape',
-      severity: 'LOW',
-      firstSeen: '2019-05-24',
-      lastSeen: '2021-06-22',
+      firstSeen: breaches[0]?.breachDate || '2016-01-01',
+      lastSeen: breaches[breaches.length - 1]?.breachDate || '2023-01-01',
       isRedacted: false,
     },
   ];
+
+  if (breaches.some((b) => b.dataClasses.includes('Passwords'))) {
+    const hashType = seed % 2 === 0 ? 'bcrypt' : 'SHA-1';
+    exposures.push({
+      type: `Password Hash (${hashType})`,
+      value: `$2b$12$${(seed.toString(16) + '0123456789abcdef').slice(0, 24)}████████`,
+      source: (breaches.find((b) => b.dataClasses.includes('Passwords'))?.name || 'Breach') + ' data leak',
+      severity: 'HIGH',
+      firstSeen: breaches[0]?.breachDate || '2018-05-10',
+      lastSeen: '2023-01-01',
+      isRedacted: true,
+    });
+  }
+
+  if (seed % 2 === 0 || breaches.some((b) => b.dataClasses.includes('Phone numbers'))) {
+    exposures.push({
+      type: 'Phone Number',
+      value: `+1 (${200 + (seed % 700)}) ${200 + (seed % 700)}-████`,
+      source: 'Scraped Directory / Breach Records',
+      severity: 'HIGH',
+      firstSeen: '2021-06-22',
+      lastSeen: '2024-01-10',
+      isRedacted: true,
+    });
+  }
+
+  if (seed % 3 === 0 || breaches.some((b) => b.dataClasses.includes('Geographic locations'))) {
+    const cities = [
+      'San Francisco, CA, United States',
+      'New York, NY, United States',
+      'Austin, TX, United States',
+      'Seattle, WA, United States',
+      'London, United Kingdom',
+    ];
+    exposures.push({
+      type: 'Geographic Location',
+      value: cities[seed % cities.length],
+      source: 'Social Profile Scraping & Breach Data',
+      severity: 'LOW',
+      firstSeen: '2019-05-24',
+      lastSeen: '2024-02-15',
+      isRedacted: false,
+    });
+  }
+
+  return exposures;
 }
 
-// ── Attack Vectors ───────────────────────────────────────────
+// ── Attack Vectors (Seeded) ──────────────────────────────────
 
 export function getMockAttackVectors(target: string): AttackVector[] {
+  const seed = getSeed(target);
+  const breaches = getMockBreaches(target);
+  const breachNames = breaches.map((b) => b.name);
+
   return [
     {
       name: 'Credential Stuffing',
       severity: 'HIGH',
-      likelihood: 82,
+      likelihood: Math.min(95, 65 + (seed % 30)),
       description:
-        'Attackers use automated tools to test breached email/password combinations ' +
-        'across hundreds of services. With 4 known breaches, there is a high probability ' +
-        'that at least one credential pair has been reused on other platforms.',
+        `Automated testing of compromised credentials from ${breachNames.join(', ')} ` +
+        `across web services to exploit password reuse.`,
       mitigations: [
-        'Enable unique, strong passwords via a password manager',
-        'Activate multi-factor authentication on all accounts',
-        'Monitor login attempts for anomalous geolocation',
+        'Enable unique passwords for all services using a password manager',
+        'Activate multi-factor authentication (MFA) across all accounts',
+        'Monitor login alerts for unauthorized location access',
       ],
-      relatedBreaches: ['Adobe', 'Dropbox', 'Canva'],
+      relatedBreaches: breachNames,
     },
     {
-      name: 'Spear Phishing',
+      name: 'Spear Phishing & Social Engineering',
       severity: 'MEDIUM',
-      likelihood: 65,
+      likelihood: Math.min(90, 50 + (seed % 35)),
       description:
-        'The combination of professional details (job title, company, location) from ' +
-        'LinkedIn scrapes and personal interests from the blog creates a rich profile ' +
-        'for crafting highly targeted phishing emails.',
+        `Targeted phishing campaigns leveraging public profile data and exposed email address ${target}.`,
       mitigations: [
-        'Implement email authentication (SPF, DKIM, DMARC)',
-        'Train on identifying social engineering tactics',
-        'Use browser-based phishing detection extensions',
+        'Verify unexpected requests through an independent channel',
+        'Enable anti-phishing protections in your email workspace',
       ],
-      relatedBreaches: ['LinkedIn'],
+      relatedBreaches: breachNames.slice(0, 2),
     },
     {
-      name: 'Social Engineering',
-      severity: 'MEDIUM',
-      likelihood: 58,
+      name: 'Account Takeover (ATO)',
+      severity: seed % 2 === 0 ? 'HIGH' : 'MEDIUM',
+      likelihood: 40 + (seed % 35),
       description:
-        'Public social profiles and conference appearances provide enough personal ' +
-        'context for an attacker to impersonate a colleague, recruiter, or conference ' +
-        'organizer in a vishing (voice phishing) or pretexting attack.',
+        `Combines exposed password hashes and personal data to attempt unauthorized session takeover.`,
       mitigations: [
-        'Limit publicly-shared personal information',
-        'Verify unexpected contacts through a separate channel',
-        'Establish out-of-band verification codes with key contacts',
+        'Enforce biometric or FIDO2 hardware passkeys',
+        'Revoke active sessions periodically across all platforms',
       ],
-    },
-    {
-      name: 'Account Takeover',
-      severity: 'LOW',
-      likelihood: 35,
-      description:
-        'If password hints (Adobe) or partial passwords are combined with OSINT about ' +
-        'the target, an attacker may be able to reconstruct credentials or bypass ' +
-        'knowledge-based authentication (KBA) security questions.',
-      mitigations: [
-        'Replace security questions with hardware tokens',
-        'Monitor for unauthorized session creation',
-        'Enable login notification alerts on all services',
-      ],
-      relatedBreaches: ['Adobe'],
+      relatedBreaches: breachNames,
     },
   ];
 }
@@ -409,11 +433,9 @@ export function getMockRemediationSteps(): RemediationStep[] {
     {
       id: 1,
       priority: 'CRITICAL',
-      title: 'Rotate All Breached Credentials Immediately',
+      title: 'Rotate All Breached Passwords',
       description:
-        'Change passwords for Adobe, Canva, LinkedIn, and Dropbox accounts. ' +
-        'Generate unique 20+ character passwords using a password manager. ' +
-        'If any of these passwords were reused elsewhere, change those too.',
+        'Change passwords for any accounts associated with compromised breaches immediately. Generate 16+ character unique passwords.',
       effort: 'moderate',
       impact: 'high',
       category: 'Credential Hygiene',
@@ -422,142 +444,51 @@ export function getMockRemediationSteps(): RemediationStep[] {
     {
       id: 2,
       priority: 'HIGH',
-      title: 'Enable Multi-Factor Authentication Everywhere',
+      title: 'Enable Two-Factor Authentication (2FA)',
       description:
-        'Activate MFA on all accounts, prioritizing email, financial, and cloud ' +
-        'services. Prefer hardware security keys (FIDO2/WebAuthn) or authenticator ' +
-        'apps over SMS-based 2FA, which is vulnerable to SIM-swapping.',
-      effort: 'moderate',
+        'Activate 2FA using an authenticator app (e.g. Google Authenticator, Bitwarden) on critical email and banking accounts.',
+      effort: 'minimal',
       impact: 'high',
       category: 'Authentication Hardening',
     },
     {
       id: 3,
       priority: 'MEDIUM',
-      title: 'Audit & Minimize Public Data Exposure',
-      description:
-        'Review LinkedIn privacy settings to restrict profile visibility. Remove or ' +
-        'redact sensitive details (phone number, precise location) from public profiles. ' +
-        'Consider using a dedicated "public" email address for conferences and open source.',
-      effort: 'minimal',
-      impact: 'medium',
-      category: 'Privacy Hardening',
-    },
-    {
-      id: 4,
-      priority: 'MEDIUM',
       title: 'Set Up Continuous Breach Monitoring',
       description:
-        'Subscribe to breach notification services (Have I Been Pwned, Firefox Monitor) ' +
-        'for all known email addresses. Configure alerts for instant notification when ' +
-        'new exposures are detected.',
+        'Monitor your email address for new data breaches using Have I Been Pwned or Firefox Monitor.',
       effort: 'minimal',
       impact: 'medium',
       category: 'Ongoing Monitoring',
       actionUrl: 'https://haveibeenpwned.com/NotifyMe',
     },
-    {
-      id: 5,
-      priority: 'LOW',
-      title: 'Request Data Deletion from Breached Services',
-      description:
-        'Exercise your right to erasure (GDPR Art. 17 / CCPA) with Adobe, Canva, and ' +
-        'Dropbox to ensure legacy data is purged from their systems. Document your ' +
-        'requests and follow up after 30 days.',
-      effort: 'significant',
-      impact: 'low',
-      category: 'Data Minimization',
-    },
   ];
 }
 
-// ── Timeline Events ──────────────────────────────────────────
+// ── Timeline Events (Seeded) ─────────────────────────────────
 
 export function getMockTimeline(target: string): TimelineEvent[] {
+  const seed = getSeed(target);
+  const breaches = getMockBreaches(target);
   const username = target.split('@')[0] || target;
 
-  const timeline: TimelineEvent[] = [
-    {
-      date: '2012-07-01',
-      type: 'breach',
-      title: 'Dropbox Data Breach',
-      description: '68 million accounts compromised. Target email found in dataset.',
-      severity: 'HIGH',
-      source: 'Dropbox',
-    },
-    {
-      date: '2013-10-04',
-      type: 'breach',
-      title: 'Adobe Data Breach',
-      description: '152 million accounts exposed including password hints in plaintext.',
-      severity: 'HIGH',
-      source: 'Adobe',
-    },
-    {
-      date: '2018-03-15',
-      type: 'profile_update',
-      title: 'GitHub Account Created',
-      description: `${username} created a GitHub profile and began contributing to open-source projects.`,
-      severity: 'INFO',
-      source: 'GitHub',
-    },
-    {
-      date: '2019-05-24',
-      type: 'breach',
-      title: 'Canva Data Breach',
-      description: '137 million accounts exposed. Target email found with bcrypt hashed password.',
-      severity: 'MEDIUM',
-      source: 'Canva',
-    },
-    {
-      date: '2020-09-10',
-      type: 'profile_update',
-      title: 'LinkedIn Profile Created',
-      description: 'Public profile registered under name matching target footprint.',
-      severity: 'INFO',
-      source: 'LinkedIn',
-    },
-    {
-      date: '2021-06-22',
-      type: 'breach',
-      title: 'LinkedIn Scraped Dataset',
-      description: '700 million users scraped. Data contains target email, phone number, and employer info.',
-      severity: 'HIGH',
-      source: 'LinkedIn Scraper',
-    },
-    {
-      date: '2024-11-12',
-      type: 'exposure',
-      title: 'Sensitive PDF Indexed',
-      description: 'Resume PDF containing personal contact details indexed by search engine crawler.',
-      severity: 'MEDIUM',
-      source: 'Google Search',
-    },
-    {
-      date: '2025-02-28',
-      type: 'mention',
-      title: 'Conference Speaker Profile Published',
-      description: `${username} listed as speaker at SecureCon 2025, increasing public profile visibility.`,
-      severity: 'LOW',
-      source: 'SecureCon',
-    },
-    {
-      date: '2026-05-14',
-      type: 'mention',
-      title: 'Open-Source Contribution Spotlight',
-      description: 'DEV Community published article highlighting security contributions.',
-      severity: 'INFO',
-      source: 'DEV Community',
-    },
-    {
-      date: '2026-06-20',
-      type: 'mention',
-      title: 'Repository Trending on GitHub',
-      description: `Security utility by ${username} received 340+ stars in one week.`,
-      severity: 'INFO',
-      source: 'GitHub',
-    },
-  ];
+  const events: TimelineEvent[] = breaches.map((b) => ({
+    date: b.breachDate,
+    type: 'breach',
+    title: `${b.name} Data Breach`,
+    description: `Credentials exposed in ${b.name} breach (${b.pwnCount.toLocaleString()} total accounts).`,
+    severity: b.severity,
+    source: b.name,
+  }));
 
-  return timeline.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  events.push({
+    date: `${2017 + (seed % 5)}-0${(seed % 8) + 1}-10`,
+    type: 'profile_update',
+    title: 'Developer Profile Indexed',
+    description: `Public activity indexed for handle "${username}".`,
+    severity: 'INFO',
+    source: 'GitHub',
+  });
+
+  return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }

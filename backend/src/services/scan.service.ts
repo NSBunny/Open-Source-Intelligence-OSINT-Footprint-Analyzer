@@ -28,7 +28,11 @@ import { calculateRiskScore } from './riskScore.service';
 // ── Constants ────────────────────────────────────────────────
 
 const SCAN_TTL_MS = 60 * 60 * 1000;          // 1 hour
-const PYTHON_ENGINE_URL = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000';
+let rawEngineUrl = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000';
+if (rawEngineUrl && !rawEngineUrl.startsWith('http://') && !rawEngineUrl.startsWith('https://')) {
+  rawEngineUrl = `https://${rawEngineUrl}`;
+}
+const PYTHON_ENGINE_URL = rawEngineUrl;
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;   // purge expired every 5 min
 
 // ── In-Memory Stores ─────────────────────────────────────────
