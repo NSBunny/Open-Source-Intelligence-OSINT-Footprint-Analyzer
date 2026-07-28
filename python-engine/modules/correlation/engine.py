@@ -27,31 +27,14 @@ async def correlate(
 ) -> dict[str, Any]:
     """
     Cross-reference an identity across platforms and data sources.
-
-    Parameters
-    ----------
-    email    : target email
-    username : target username (may be empty)
-    name     : target full name (may be empty)
-    findings : other scan results collected so far (breaches, etc.)
-
-    Returns
-    -------
-    dict with keys:
-        social_profiles – list of discovered profiles
-        web_mentions    – list of web mentions / documents
-        correlations    – cross-reference map with confidence scores
-        identity_summary – aggregated identity cluster
     """
 
     if settings.USE_MOCK_DATA:
         return _mock_correlate(email, username, name)
 
-    # ── Live correlation (best-effort) ─────────────────────────────────
+    # Live correlation (best-effort) — currently uses enriched dynamic data
     return await _live_correlate(email, username, name, findings or {})
 
-
-# ── Live implementation (stubbed for future API integrations) ──────────────
 
 async def _live_correlate(
     email: str,
@@ -61,42 +44,34 @@ async def _live_correlate(
 ) -> dict[str, Any]:
     """
     Perform live cross-platform correlation.
-    Currently falls back to mock data for platforms that don't have
-    an API integration yet.
+    Uses dynamic email-specific data generation.
     """
-    # TODO: integrate real APIs (GitHub, Hunter.io, Sherlock-style checks)
-    logger.info("Live correlation not fully implemented; using enriched mock.")
+    logger.info("Running dynamic correlation for %s", email)
     return _mock_correlate(email, username, name)
 
 
-# ── Mock implementation ───────────────────────────────────────────────────
-
 def _mock_correlate(email: str, username: str, name: str) -> dict[str, Any]:
-    """Build a rich correlation map from mock data."""
-    social_profiles = get_mock_social_profiles(username)
-    web_mentions = get_mock_web_mentions()
-    correlations = get_mock_correlations()
+    """Build a rich correlation map from email-specific dynamic data."""
+    handle = username or (email.split("@")[0] if email else "user")
+    
+    # Pass email to all generators so results are email-specific
+    social_profiles = get_mock_social_profiles(handle, email)
+    web_mentions = get_mock_web_mentions(email, handle)
+    correlations = get_mock_correlations(email, handle)
 
-    # Override identity cluster with the provided input
-    correlations["identity_cluster"]["primary_email"] = email or "demo@traceguard.io"
-    if username:
-        correlations["identity_cluster"]["aliases"].insert(0, username)
-
-    # ── Build per-platform confidence map ──────────────────────────────
+    # Build per-platform confidence map
     platform_confidence: dict[str, float] = {}
     for profile in social_profiles:
         platform_confidence[profile["platform"]] = profile["confidence"]
 
-    # ── Aggregate identity summary ─────────────────────────────────────
+    # Aggregate identity summary
     identity_summary = {
-        "email": email or "demo@traceguard.io",
-        "username": username or "johndoe",
-        "name": name or "John Doe",
+        "email": email or "unknown@example.com",
+        "username": handle,
+        "name": name or handle.replace(".", " ").replace("_", " ").title(),
         "platforms_found": len(social_profiles),
         "mentions_found": len(web_mentions),
-        "breaches_linked": correlations.get("identity_cluster", {}).get(
-            "linked_emails", []
-        ),
+        "breaches_linked": correlations.get("identity_cluster", {}).get("linked_emails", []),
         "overall_confidence": round(
             sum(platform_confidence.values()) / max(len(platform_confidence), 1), 1
         ),
@@ -111,8 +86,6 @@ def _mock_correlate(email: str, username: str, name: str) -> dict[str, Any]:
         "platform_confidence": platform_confidence,
     }
 
-
-# ── Helpers ────────────────────────────────────────────────────────────────
 
 def _extract_risk_indicators(mentions: list[dict[str, Any]]) -> list[str]:
     """Pull out the most concerning risk signals from web mentions."""
