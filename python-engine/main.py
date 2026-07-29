@@ -24,6 +24,7 @@ from modules.graph.builder import build_exposure_graph
 from modules.risk.scorer import calculate_risk_score
 from modules.recommendation.engine import generate_recommendations
 from modules.live_prober import probe_email_live
+from modules.shodan_engine import scan_shodan
 
 # ── Logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -133,11 +134,13 @@ async def run_scan(request: ScanRequest):
             findings=None,  # first pass — no findings yet
         )
         live_task = probe_email_live(request.email, request.username)
+        shodan_task = scan_shodan(request.email)
 
-        breach_results, correlation_results, live_results = await asyncio.gather(
+        breach_results, correlation_results, live_results, shodan_results = await asyncio.gather(
             breach_task,
             corr_task,
             live_task,
+            shodan_task,
             return_exceptions=True
         )
 
