@@ -1,6 +1,15 @@
 import type { ScanRequest, ScanResult } from "@/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+function getApiBaseUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!envUrl) return "http://localhost:5000";
+  if (envUrl.startsWith("http://") || envUrl.startsWith("https://")) {
+    return envUrl.replace(/\/$/, "");
+  }
+  return `https://${envUrl.replace(/\/$/, "")}`;
+}
+
+const API_BASE = getApiBaseUrl();
 
 class ApiService {
   private baseUrl: string;
