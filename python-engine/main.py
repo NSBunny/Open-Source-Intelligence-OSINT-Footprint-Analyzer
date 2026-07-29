@@ -23,6 +23,7 @@ from modules.correlation.engine import correlate
 from modules.graph.builder import build_exposure_graph
 from modules.risk.scorer import calculate_risk_score
 from modules.recommendation.engine import generate_recommendations
+from modules.live_prober import probe_email_live
 
 # ── Logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -131,11 +132,29 @@ async def run_scan(request: ScanRequest):
             name=request.name,
             findings=None,  # first pass — no findings yet
         )
+        live_task = probe_email_live(request.email, request.username)
 
-        breach_results, correlation_results = await asyncio.gather(
+        breach_results, correlation_results, live_results = await asyncio.gather(
             breach_task,
             corr_task,
+            live_task,
+            return_exceptions=True
         )
+
+        # Merge live prober findings if successful
+        if isinstance(live_results, dict):
+            live_breaches = live_results.get("breaches", [])
+            if live_breaches and isinstance(breach_results, dict):
+                breach_results["breaches"] = (breach_results.get("breaches", []) or []) + live_breaches
+                breach_results["total"] = len(breach_results["breaches"])
+
+            live_social = live_results.get("social_profiles", [])
+            if live_social and isinstance(correlation_results, dict):
+                correlation_results["social_profiles"] = (correlation_results.get("social_profiles", []) or []) + live_social
+
+            live_mentions = live_results.get("web_mentions", [])
+            if live_mentions and isinstance(correlation_results, dict):
+                correlation_results["web_mentions"] = (correlation_results.get("web_mentions", []) or []) + live_mentions
 
         # ── Phase 2: Risk scoring ─────────────────────────────────────
         combined_findings = {
