@@ -139,14 +139,44 @@ async def check_xposedornot_live(email: str) -> list[dict[str, Any]]:
 
 
 async def probe_social_accounts_live(username: str) -> list[dict[str, Any]]:
-    """Live HTTP probe to check account existence across public web platforms."""
+    """Live HTTP probe to check account existence across public web platforms with direct deletion links."""
     platforms = [
-        {"name": "GitHub", "url": f"https://github.com/{username}", "check_status": 200},
-        {"name": "Reddit", "url": f"https://www.reddit.com/user/{username}/about.json", "check_status": 200},
-        {"name": "DEV.to", "url": f"https://dev.to/{username}", "check_status": 200},
-        {"name": "DockerHub", "url": f"https://hub.docker.com/v2/users/{username}", "check_status": 200},
-        {"name": "PyPI", "url": f"https://pypi.org/user/{username}", "check_status": 200},
-        {"name": "Keybase", "url": f"https://keybase.io/_/api/1.0/user/lookup.json?usernames={username}", "check_status": 200},
+        {
+            "name": "GitHub",
+            "url": f"https://github.com/{username}",
+            "deleteUrl": "https://github.com/settings/deactivate",
+            "check_status": 200
+        },
+        {
+            "name": "Reddit",
+            "url": f"https://www.reddit.com/user/{username}/about.json",
+            "deleteUrl": "https://www.reddit.com/settings/deactivate",
+            "check_status": 200
+        },
+        {
+            "name": "DEV.to",
+            "url": f"https://dev.to/{username}",
+            "deleteUrl": "https://dev.to/settings/account",
+            "check_status": 200
+        },
+        {
+            "name": "DockerHub",
+            "url": f"https://hub.docker.com/v2/users/{username}",
+            "deleteUrl": "https://hub.docker.com/settings/account",
+            "check_status": 200
+        },
+        {
+            "name": "PyPI",
+            "url": f"https://pypi.org/user/{username}",
+            "deleteUrl": "https://pypi.org/manage/account/",
+            "check_status": 200
+        },
+        {
+            "name": "Keybase",
+            "url": f"https://keybase.io/_/api/1.0/user/lookup.json?usernames={username}",
+            "deleteUrl": "https://keybase.io/account/delete",
+            "check_status": 200
+        },
     ]
 
     found_profiles: list[dict[str, Any]] = []
@@ -175,6 +205,7 @@ async def probe_social_accounts_live(username: str) -> list[dict[str, Any]]:
                             "platform": p["name"],
                             "username": username,
                             "url": p["url"],
+                            "deleteAccountUrl": p["deleteUrl"],
                             "bio": bio,
                             "followers": followers,
                             "isVerified": True,
